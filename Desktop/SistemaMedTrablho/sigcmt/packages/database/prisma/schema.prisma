@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// TENANTS (Clínicas)
+// ─────────────────────────────────────────────
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  phone     String?
+  email     String?
+  address   Json?
+  settings  Json     @default("{}")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  patients     Patient[]
+  appointments Appointment[]
+  rooms        Room[]
+  companies    Company[]
+  asos         Aso[]
+
+  @@map("tenants")
+}
+
+// ─────────────────────────────────────────────
+// USERS (Profissionais / Admins)
+// ─────────────────────────────────────────────
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String
+  email        String
+  passwordHash String
+  fullName     String
+  role         UserRole  @default(RECEPTIONIST)
+  permissions  String[]  @default([])
+  crmNumber    String?
+  crmState     String?
+  phone        String?
+  photoUrl     String?
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant               Tenant        @relation(fields: [tenantId], references: [id])
+  refreshTokens        RefreshToken[]
+  doctorSchedules      DoctorSchedule[]
+  appointmentsAsDoctor Appointment[] @relation("DoctorAppointments")
+  createdPatients      Patient[]     @relation("CreatedByUser")
+  auditLogs            AuditLog[]
+  asos                 Aso[]         @relation("DoctorAso")
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  BILLING
+  WAREHOUSE
+  HR
+  PSYCHOLOGIST
+  COMPANY_USER
+  PATIENT_USER
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+// COMPANIES (Empresas clientes)
+// ─────────────────────────────────────────────
+model Company {
+  id            String        @id @default(uuid())
+  tenantId      String
+  cnpj          String
+  cnpjHash      String
+  legalName     String
+  tradeName     String?
+  address       Json?
+  phone         String?
+  email         String?
+  cnae          String?
+  riskLevel     Int           @default(1)
+  sector        String?
+  employeeCount Int?
+  status        CompanyStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  patients     Patient[]
+  appointments Appointment[]
+  asos         Aso[]
+
+  @@unique([tenantId, cnpjHash])
+  @@index([tenantId, status])
+  @@map("companies")
+}
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+}
+
+// ─────────────────────────────────────────────
+// PATIENTS (Pacientes)
+// ─────────────────────────────────────────────
+model Patient {
+  id                    String        @id @default(uuid())
+  tenantId              String
+  fullName              String
+  cpfEncrypted          String
+  cpfHash               String
+  rg                    String?
+  birthDate             DateTime?
+  gender                String?
+  bloodType             String?
+  phoneEncrypted        String?
+  emailEncrypted        String?
+  whatsappEncrypted     String?
+  address               Json?
+  currentCompanyId      String?
+  currentJobTitle       String?
+  occupationalRisks     Json          @default("[]")
+  allergies             Json          @default("[]")
+  continuousMedications Json          @default("[]")
+  medicalRestrictions   String?
+  familyHistory         Json          @default("[]")
+  heightCm              Float?
+  weightKg              Float?
+  photoUrl              String?
+  status                PatientStatus @default(ACTIVE)
+  lgpdConsent           Json?
+  esocialId             String?
+  customFields          Json          @default("{}")
+  createdById           String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
+  company      Company?         @relation(fields: [currentCompanyId], references: [id])
+  createdBy    User?            @relation("CreatedByUser", fields: [createdById], references: [id])
+  appointments Appointment[]
+  documents    PatientDocument[]
+  asos         Aso[]
+
+  @@unique([tenantId, cpfHash])
+  @@index([tenantId, status])
+  @@index([tenantId, currentCompanyId])
+  @@map("patients")
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  DECEASED
+}
+
+model PatientDocument {
+  id         String   @id @default(uuid())
+  patientId  String
+  type       String
+  fileUrl    String
+  fileName   String
+  fileSize   Int?
+  uploadedAt DateTime @default(now())
+  uploadedBy String?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_documents")
+}
+
+// ─────────────────────────────────────────────
+// ROOMS (Salas / Consultórios)
+// ─────────────────────────────────────────────
+model Room {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  capacity  Int      @default(1)
+  equipment String[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+
+  @@index([tenantId])
+  @@map("rooms")
+}
+
+// ─────────────────────────────────────────────
+// DOCTOR SCHEDULES
+// ─────────────────────────────────────────────
+model DoctorSchedule {
+  id              String  @id @default(uuid())
+  doctorId        String
+  dayOfWeek       Int
+  startTime       String
+  endTime         String
+  slotDurationMin Int     @default(30)
+  breakStart      String?
+  breakEnd        String?
+  maxAppointments Int?
+  active          Boolean @default(true)
+
+  doctor User @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek])
+  @@map("doctor_schedules")
+}
+
+model BlockedSlot {
+  id        String   @id @default(uuid())
+  tenantId  String
+  doctorId  String?
+  roomId    String?
+  startAt   DateTime
+  endAt     DateTime
+  reason    String?
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, startAt])
+  @@map("blocked_slots")
+}
+
+// ─────────────────────────────────────────────
+// APPOINTMENTS (Agendamentos)
+// ─────────────────────────────────────────────
+model Appointment {
+  id                  String            @id @default(uuid())
+  tenantId            String
+  patientId           String
+  doctorId            String
+  roomId              String?
+  companyId           String?
+  appointmentType     AppointmentType   @default(INITIAL)
+  scheduledAt         DateTime
+  durationMinutes     Int               @default(30)
+  status              AppointmentStatus @default(SCHEDULED)
+  confirmationChannel String?
+  confirmedAt         DateTime?
+  checkedInAt         DateTime?
+  startedAt           DateTime?
+  endedAt             DateTime?
+  cancellationReason  String?
+  cancelledBy         String?
+  bookingChannel      String            @default("web_portal")
+  remindersSent       Json              @default("[]")
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  patient Patient  @relation(fields: [patientId], references: [id])
+  doctor  User     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  room    Room?    @relation(fields: [roomId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+  triage  Triage?
+
+  @@index([tenantId, scheduledAt])
+  @@index([tenantId, doctorId, scheduledAt])
+  @@index([tenantId, patientId])
+  @@index([tenantId, status])
+  @@map("appointments")
+}
+
+enum AppointmentType {
+  INITIAL
+  PERIODIC
+  DISMISSAL
+  ASO
+  FOLLOWUP
+  RETURN
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Triage {
+  id                 String       @id @default(uuid())
+  appointmentId      String       @unique
+  patientId          String
+  performedBy        String?
+  channel            String       @default("in_person")
+  status             TriageStatus @default(PENDING)
+  responses          Json         @default("[]")
+  riskFlags          Json         @default("[]")
+  currentSymptoms    String[]     @default([])
+  medicationsInUse   Json         @default("[]")
+  accessibilityNeeds Json         @default("{}")
+  completedAt        DateTime?
+  durationSeconds    Int?
+  doctorNotes        String?
+  reviewedBy         String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("triages")
+}
+
+enum TriageStatus {
+  PENDING
+  COMPLETED
+  INCOMPLETE
+  APPROVED
+}
+
+// ─────────────────────────────────────────────
+// ASO (Atestado de Saúde Ocupacional)
+// ─────────────────────────────────────────────
+model Aso {
+  id                 String        @id @default(uuid())
+  tenantId           String
+  appointmentId      String?
+  patientId          String
+  companyId          String?
+  doctorId           String
+  examType           AsoExamType
+  conclusion         AsoConclusion
+  restrictions       String?
+  complementaryExams Json          @default("[]")
+  riskFactors        Json          @default("[]")
+  validUntil         DateTime?
+  observations       String?
+  issuedAt           DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  patient Patient  @relation(fields: [patientId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+  doctor  User     @relation("DoctorAso", fields: [doctorId], references: [id])
+
+  @@index([tenantId, issuedAt])
+  @@index([tenantId, patientId])
+  @@map("aso")
+}
+
+enum AsoExamType {
+  ADMISSIONAL
+  PERIODICO
+  RETORNO_TRABALHO
+  MUDANCA_FUNCAO
+  DEMISSIONAL
+}
+
+enum AsoConclusion {
+  APTO
+  INAPTO
+  APTO_RESTRICOES
+}
+
+// ─────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────
+model AuditLog {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String?
+  action       String
+  resourceType String
+  resourceId   String?
+  oldValue     Json?
+  newValue     Json?
+  ipAddress    String?
+  userAgent    String?
+  sessionId    String?
+  timestamp    DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, resourceType, timestamp])
+  @@index([tenantId, userId, timestamp])
+  @@map("audit_logs")
+}

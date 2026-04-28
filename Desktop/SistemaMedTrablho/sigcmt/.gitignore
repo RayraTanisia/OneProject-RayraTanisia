@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+!.env.example
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Prisma
+packages/database/node_modules/
+
+# Uploads
+uploads/
