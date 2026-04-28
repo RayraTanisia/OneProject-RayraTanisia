@@ -17,6 +17,7 @@ import { companyRoutes } from './modules/companies/company.routes'
 import { asoRoutes } from './modules/aso/aso.routes'
 import { reportsRoutes } from './modules/reports/reports.routes'
 import { receptionRoutes, publicCheckinRoutes } from './modules/reception/reception.routes'
+import { chatbotRoutes } from './modules/reception/chatbot.routes'
 import { documentsRoutes } from './modules/documents/documents.routes'
 import { pcmsoRoutes } from './modules/pcmso/pcmso.routes'
 import { authenticate } from './shared/middleware/authenticate'
@@ -100,6 +101,7 @@ async function build() {
   // Rotas públicas (sem auth)
   await app.register(authRoutes, { prefix: '/api/v1/auth' })
   await app.register(publicCheckinRoutes, { prefix: '/api/v1/public/checkin' })
+  await app.register(chatbotRoutes, { prefix: '/api/v1/public/chatbot' })
 
   // Rotas protegidas
   await app.register(async (protectedApp) => {

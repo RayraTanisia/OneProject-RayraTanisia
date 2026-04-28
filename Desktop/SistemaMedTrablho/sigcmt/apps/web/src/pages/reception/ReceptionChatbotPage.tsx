@@ -156,7 +156,8 @@ export default function ReceptionChatbotPage() {
     if (saveFn) {
       const r = await saveFn().catch(() => ({ ok: false as const }))
       if (r.ok) suffix = '\n\n💾 *Dados salvos no sistema com sucesso!*'
-      else if (!r.ok && (r as any).duplicate) suffix = '\n\n📋 *Cadastro já existe no sistema — identificado!*'
+      else if (!r.ok && (r as any).duplicate) suffix = '\n\n📋 *Cadastro já existente no sistema — identificado com sucesso!*'
+      else suffix = '\n\n⚠️ *Não foi possível salvar automaticamente. Por favor, apresente seus dados na recepção para cadastro.*'
     }
     await new Promise(res => setTimeout(res, 700))
     setTyping(false)
@@ -164,10 +165,12 @@ export default function ReceptionChatbotPage() {
   }
 
   async function savePatient(fields: { fullName: string; cpf: string; customFields?: Record<string, string> }): Promise<SaveResult> {
+    const cpfClean = fields.cpf.replace(/\D/g, '')
+    if (cpfClean.length !== 11) return { ok: false }
     try {
-      await api.post('/patients', {
+      await api.post('/public/chatbot/patient', {
         fullName: fields.fullName,
-        cpf: fields.cpf.replace(/\D/g, ''),
+        cpf: cpfClean,
         customFields: { origem: 'chatbot', ...fields.customFields },
         lgpdConsent: { consented: true, channels: ['whatsapp'] },
       })
@@ -179,14 +182,15 @@ export default function ReceptionChatbotPage() {
   }
 
   async function saveCompany(fields: { cnpj: string; legalName: string; tradeName?: string; phone?: string; email?: string }): Promise<SaveResult> {
+    const cnpjClean = fields.cnpj.replace(/\D/g, '')
+    if (cnpjClean.length !== 14) return { ok: false }
     try {
-      await api.post('/companies', {
-        cnpj: fields.cnpj.replace(/\D/g, ''),
+      await api.post('/public/chatbot/company', {
+        cnpj: cnpjClean,
         legalName: fields.legalName,
         tradeName: fields.tradeName,
         phone: fields.phone,
         email: fields.email,
-        status: 'PROSPECT',
       })
       return { ok: true }
     } catch (err: any) {
